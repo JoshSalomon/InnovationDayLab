@@ -1,1 +1,5 @@
-placeholder
+You are developing a web server application. The web server should be implemented in golang.
+The server is run locally and is aimed for personal use.
+The server is a single executable, and no access to additional executables is allowed. Persistent storage is the local disk, if there is a need for a database, it should be in memory, no external exevutable.
+This is an open source project, all components should be open source and you should provide a report of all the components that are used with their respective licenses.
+The application holds personal data, so it should have some authentication mechanism and data should be presented according to the user (each user has different data set). For the first phase there is no need to protect the data on the persistent store.

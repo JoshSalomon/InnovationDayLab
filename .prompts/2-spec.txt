@@ -1,0 +1,5 @@
+I want to build web app that handles tasks. It shows the tasks (each one has fields such as description, due-date, status, progress etc.). Task have dependencies so the app should be able to edis and show dependencies. circular dependencies are not allowed. This is a multi user application, each user sees only his own tasks. the app starts with a single admin user which is the only user which can craete additional users to the app - this is the only thing admin can do. 
+non admin users can create, edit and delete tasks (delete requires a dialog with option to cancel).
+Tasks can be filtered in multiple ways, but the most important fileters are 'all', 'completed' and 'in progress' (meaning all that are not completed). there is no way for a user to see the tasks of another user. The UI should be simple and intuitive.
+Tasks should persist between invications of the server
+On the next phase I would like to add Rest API to the server, with 2 APIs, login and get_tasks. No need to add APIs for editing tasks. 
