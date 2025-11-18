@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - Task Management App</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+    <div id="app" x-data="userManagementApp()">
+        <header>
+            <h1>Task Management</h1>
+            <nav>
+                <a href="/">Home</a>
+                <a href="/user-management.html">User Management</a>
+                <button @click="handleLogout" style="background: none; border: none; color: inherit; cursor: pointer; text-decoration: underline;">Logout</button>
+            </nav>
+        </header>
+        <main style="max-width: 800px; margin: 2rem auto; padding: 0 1rem;">
+            <h2>Create New User</h2>
+            
+            <div x-show="error" style="color: red; margin: 1rem 0; padding: 0.75rem; background-color: #ffe6e6; border-radius: 4px;" x-text="error"></div>
+            <div x-show="success" style="color: green; margin: 1rem 0; padding: 0.75rem; background-color: #e6ffe6; border-radius: 4px;" x-text="success"></div>
+            
+            <form @submit.prevent="handleCreateUser" style="margin-top: 2rem;">
+                <div style="margin-bottom: 1rem;">
+                    <label for="username" style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Username *</label>
+                    <input
+                        type="text"
+                        id="username"
+                        x-model="form.username"
+                        @blur="validateUsername()"
+                        required
+                        minlength="3"
+                        maxlength="50"
+                        :style="usernameError ? 'width: 100%; padding: 0.5rem; border: 1px solid #e74c3c; border-radius: 4px;' : 'width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;'"
+                        placeholder="Enter username (3-50 characters)"
+                    >
+                    <div x-show="usernameError" style="color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;" x-text="usernameError"></div>
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label for="password" style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Password *</label>
+                    <input
+                        type="password"
+                        id="password"
+                        x-model="form.password"
+                        @blur="validatePassword()"
+                        required
+                        minlength="8"
+                        :style="passwordError ? 'width: 100%; padding: 0.5rem; border: 1px solid #e74c3c; border-radius: 4px;' : 'width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;'"
+                        placeholder="Enter password (minimum 8 characters)"
+                    >
+                    <div x-show="passwordError" style="color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;" x-text="passwordError"></div>
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label for="email" style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Email *</label>
+                    <input
+                        type="email"
+                        id="email"
+                        x-model="form.email"
+                        @blur="validateEmail()"
+                        required
+                        :style="emailError ? 'width: 100%; padding: 0.5rem; border: 1px solid #e74c3c; border-radius: 4px;' : 'width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;'"
+                        placeholder="Enter email address"
+                    >
+                    <div x-show="emailError" style="color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;" x-text="emailError"></div>
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label for="display_name" style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Display Name (Optional)</label>
+                    <input
+                        type="text"
+                        id="display_name"
+                        x-model="form.display_name"
+                        maxlength="100"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                        placeholder="Enter display name"
+                    >
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label for="user_type" style="display: block; margin-bottom: 0.5rem; font-weight: bold;">User Type</label>
+                    <select
+                        id="user_type"
+                        x-model="form.user_type"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                    >
+                        <option value="regular">Regular User</option>
+                        <option value="admin">Admin User</option>
+                    </select>
+                </div>
+                
+                <button
+                    type="submit"
+                    :disabled="loading"
+                    style="width: 100%; padding: 0.75rem; background-color: #2c3e50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem;"
+                    :class="loading ? 'button-loading' : ''"
+                >
+                    <span x-show="!loading">Create User</span>
+                    <span x-show="loading">
+                        <span class="spinner spinner-small"></span>Creating...
+                    </span>
+                </button>
+            </form>
+        </main>
+    </div>
+    
+    <script>
+        function userManagementApp() {
+            return {
+                form: {
+                    username: '',
+                    password: '',
+                    email: '',
+                    display_name: '',
+                    user_type: 'regular'
+                },
+                error: '',
+                success: '',
+                loading: false,
+                
+                async handleCreateUser() {
+                    this.error = '';
+                    this.success = '';
+                    this.loading = true;
+                    
+                    try {
+                        const response = await fetch('/api/users', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({
+                                username: this.form.username,
+                                password: this.form.password,
+                                email: this.form.email,
+                                display_name: this.form.display_name || null,
+                                user_type: this.form.user_type
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.success = `User "${data.username}" created successfully!`;
+                            // Reset form
+                            this.form = {
+                                username: '',
+                                password: '',
+                                email: '',
+                                display_name: '',
+                                user_type: 'regular'
+                            };
+                            this.usernameError = '';
+                            this.passwordError = '';
+                            this.emailError = '';
+                        } else {
+                            const errorMsg = data.error || 'Failed to create user';
+                            this.error = errorMsg;
+                            
+                            // Try to parse field-specific errors
+                            if (errorMsg.includes('username')) {
+                                this.usernameError = errorMsg;
+                            } else if (errorMsg.includes('password')) {
+                                this.passwordError = errorMsg;
+                            } else if (errorMsg.includes('email')) {
+                                this.emailError = errorMsg;
+                            }
+                        }
+                    } catch (err) {
+                        this.error = 'Network error. Please try again.';
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async handleLogout() {
+                    try {
+                        await fetch('/api/logout', {
+                            method: 'POST',
+                            credentials: 'include'
+                        });
+                        window.location.href = '/login.html';
+                    } catch (err) {
+                        console.error('Logout failed:', err);
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

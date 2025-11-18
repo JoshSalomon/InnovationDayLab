@@ -1,0 +1,504 @@
+openapi: 3.0.3
+info:
+  title: Task Management Web Application API
+  description: |
+    REST API for multi-user task management application.
+    Supports user authentication, task CRUD operations, filtering, and dependency management.
+  version: 1.0.0
+  contact:
+    name: InnovationDayLab
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: authentication
+    description: User authentication endpoints
+  - name: users
+    description: User management (admin only)
+  - name: tasks
+    description: Task CRUD operations
+  - name: dependencies
+    description: Task dependency management
+
+paths:
+  # Authentication endpoints
+  /api/login:
+    post:
+      tags:
+        - authentication
+      summary: User login
+      description: Authenticate user with username and password, create session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: "johndoe"
+                password:
+                  type: string
+                  format: password
+                  example: "securepassword123"
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: Session cookie set
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/logout:
+    post:
+      tags:
+        - authentication
+      summary: User logout
+      description: End user session
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Logout successful
+        '401':
+          description: Not authenticated
+
+  # User management endpoints (admin only)
+  /api/users:
+    post:
+      tags:
+        - users
+      summary: Create new user (admin only)
+      description: Admin creates a new user account
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Invalid input or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Not authorized (not admin)
+
+  # Task endpoints
+  /api/tasks:
+    get:
+      tags:
+        - tasks
+      summary: List user's tasks
+      description: Get all tasks for the authenticated user, optionally filtered by status
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by status (all, completed, in_progress)
+          schema:
+            type: string
+            enum: [all, completed, in_progress]
+            default: all
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaskResponse'
+        '401':
+          description: Not authenticated
+
+    post:
+      tags:
+        - tasks
+      summary: Create new task
+      description: Create a new task for the authenticated user
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          description: Invalid input or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+
+  /api/tasks/{taskId}:
+    get:
+      tags:
+        - tasks
+      summary: Get task by ID
+      description: Get a specific task by ID (must belong to authenticated user)
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Task not found or not owned by user
+
+    put:
+      tags:
+        - tasks
+      summary: Update task
+      description: Update an existing task (must belong to authenticated user)
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: Task updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          description: Invalid input or validation error (e.g., circular dependency, invalid progress)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Task not found or not owned by user
+
+    delete:
+      tags:
+        - tasks
+      summary: Delete task
+      description: Delete a task (must belong to authenticated user). Automatically removes all dependency references.
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Task deleted successfully
+        '401':
+          description: Not authenticated
+        '404':
+          description: Task not found or not owned by user
+
+  # Task dependency endpoints
+  /api/tasks/{taskId}/dependencies:
+    get:
+      tags:
+        - dependencies
+      summary: Get task dependencies
+      description: Get all tasks that the specified task depends on
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of dependent tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dependencies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaskResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Task not found or not owned by user
+
+    post:
+      tags:
+        - dependencies
+      summary: Add task dependency
+      description: Add a dependency relationship (task depends on another task). Prevents circular dependencies.
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - depends_on_task_id
+              properties:
+                depends_on_task_id:
+                  type: integer
+                  description: ID of the task this task depends on
+      responses:
+        '201':
+          description: Dependency added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Dependency added successfully"
+        '400':
+          description: Invalid input or circular dependency detected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Task not found or not owned by user
+
+  /api/tasks/{taskId}/dependencies/{dependsOnTaskId}:
+    delete:
+      tags:
+        - dependencies
+      summary: Remove task dependency
+      description: Remove a dependency relationship
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: dependsOnTaskId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Dependency removed successfully
+        '401':
+          description: Not authenticated
+        '404':
+          description: Task or dependency not found
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: session
+
+  schemas:
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+        user_type:
+          type: string
+          enum: [admin, regular]
+        created_at:
+          type: string
+          format: date-time
+
+    CreateUserRequest:
+      type: object
+      required:
+        - username
+        - password
+        - email
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        password:
+          type: string
+          format: password
+          minLength: 8
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+          maxLength: 100
+
+    TaskResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        description:
+          type: string
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum: [completed, in_progress, not_started, blocked, deferred]
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        dependencies:
+          type: array
+          description: List of task IDs this task depends on
+          items:
+            type: integer
+
+    CreateTaskRequest:
+      type: object
+      required:
+        - description
+        - status
+        - progress
+      properties:
+        description:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum: [completed, in_progress, not_started, blocked, deferred]
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    UpdateTaskRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum: [completed, in_progress, not_started, blocked, deferred]
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        details:
+          type: string
+          description: Additional error details (optional)

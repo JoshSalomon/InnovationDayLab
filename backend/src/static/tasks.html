@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Tasks - Task Management App</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+    <div id="app" x-data="taskListApp()" x-init="loadTasks()">
+        <header>
+            <h1>Task Management</h1>
+            <nav>
+                <a href="/">Home</a>
+                <a href="/tasks.html">My Tasks</a>
+                <a href="/user-management.html" x-show="isAdmin">User Management</a>
+                <button @click="handleLogout" style="background: none; border: none; color: inherit; cursor: pointer; text-decoration: underline;">Logout</button>
+            </nav>
+        </header>
+        <main style="max-width: 1000px; margin: 2rem auto; padding: 0 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <h2>My Tasks</h2>
+                <button @click="showCreateForm = true" style="padding: 0.5rem 1rem; background-color: #2c3e50; color: white; border: none; border-radius: 4px; cursor: pointer;">+ New Task</button>
+            </div>
+            
+            <!-- Filter -->
+            <div style="margin-bottom: 1.5rem;">
+                <label style="margin-right: 1rem; font-weight: bold;">Filter:</label>
+                <button @click="filterStatus = 'all'; loadTasks()" :disabled="loading" :style="filterStatus === 'all' ? 'background-color: #2c3e50; color: white;' : 'background-color: #f0f0f0;'" style="padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; margin-right: 0.5rem;">All</button>
+                <button @click="filterStatus = 'completed'; loadTasks()" :disabled="loading" :style="filterStatus === 'completed' ? 'background-color: #2c3e50; color: white;' : 'background-color: #f0f0f0;'" style="padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; margin-right: 0.5rem;">Completed</button>
+                <button @click="filterStatus = 'in_progress'; loadTasks()" :disabled="loading" :style="filterStatus === 'in_progress' ? 'background-color: #2c3e50; color: white;' : 'background-color: #f0f0f0;'" style="padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">In Progress</button>
+            </div>
+            
+            <!-- Edit Task Form -->
+            <div x-show="showEditForm" style="margin-bottom: 2rem; padding: 1.5rem; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9;">
+                <h3 style="margin-top: 0;">Edit Task #<span style="color: #3498db; font-weight: bold;" x-text="editingTask ? editingTask.id : ''"></span></h3>
+                <form @submit.prevent="updateTask">
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Description *</label>
+                        <textarea x-model="editForm.description" required style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; min-height: 80px;" placeholder="Enter task description"></textarea>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Due Date</label>
+                            <input type="date" x-model="editForm.due_date" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                            <div x-show="isPastDueDate(editForm.due_date)" style="color: orange; font-size: 0.9rem; margin-top: 0.25rem;">⚠️ Warning: Due date is in the past</div>
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Status *</label>
+                            <select x-model="editForm.status" required style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="not_started">Not Started</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                                <option value="blocked">Blocked</option>
+                                <option value="deferred">Deferred</option>
+                            </select>
+                            <div style="margin-top: 0.5rem;">
+                                <span class="status-badge" :class="'status-' + editForm.status.replace('_', '_')" x-text="editForm.status.replace('_', ' ')"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Progress (0-100%) *</label>
+                        <input type="range" x-model.number="editForm.progress" min="0" max="100" step="1" style="width: 100%; margin-bottom: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.9rem; color: #666;">0%</span>
+                            <span style="font-weight: bold; font-size: 1.1rem;" x-text="editForm.progress + '%'"></span>
+                            <span style="font-size: 0.9rem; color: #666;">100%</span>
+                        </div>
+                        <div class="progress-bar-container" style="margin-top: 0.5rem;">
+                            <div 
+                                class="progress-bar-fill" 
+                                :class="{
+                                    'progress-completed': editForm.progress === 100,
+                                    'progress-low': editForm.progress < 30,
+                                    'progress-medium': editForm.progress >= 30 && editForm.progress < 70
+                                }"
+                                :style="'width: ' + editForm.progress + '%'"
+                            >
+                                <span x-show="editForm.progress >= 20" x-text="editForm.progress + '%'"></span>
+                            </div>
+                        </div>
+                        <div x-show="editForm.progress < 0 || editForm.progress > 100" style="color: red; font-size: 0.9rem; margin-top: 0.25rem;">Progress must be between 0 and 100</div>
+                    </div>
+                    
+                    <!-- Dependencies Section -->
+                    <div style="margin-bottom: 1rem; padding: 1rem; background-color: #f0f8ff; border: 1px solid #b0d4f1; border-radius: 4px;">
+                        <label style="display: block; margin-bottom: 0.75rem; font-weight: bold;">Dependencies</label>
+                        
+                        <!-- Existing Dependencies -->
+                        <div x-show="editForm.dependencies && editForm.dependencies.length > 0" style="margin-bottom: 1rem;">
+                            <div style="font-size: 0.9rem; margin-bottom: 0.5rem; color: #555;">Current dependencies:</div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                <template x-for="depId in editForm.dependencies" :key="depId">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; background-color: white; border: 1px solid #b0d4f1; border-radius: 4px;">
+                                        <span style="font-size: 0.9rem;">
+                                            <strong>Task #<span x-text="depId"></span>:</strong> 
+                                            <span x-text="getTaskDescription(depId)"></span>
+                                        </span>
+                                        <button 
+                                            type="button" 
+                                            @click="removeDependency(depId)" 
+                                            :disabled="loading"
+                                            style="padding: 0.25rem 0.5rem; background-color: #e74c3c; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.8rem;"
+                                            :class="loading ? 'button-loading' : ''"
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                        
+                        <!-- Add New Dependency -->
+                        <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+                            <div style="flex: 1;">
+                                <label style="display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: #555;">Add dependency:</label>
+                                <select 
+                                    x-model="newDependencyId" 
+                                    style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                                >
+                                    <option value="">Select a task...</option>
+                                    <template x-for="task in getAvailableDependencyTasks()" :key="task.id">
+                                        <option :value="task.id" x-text="'Task #' + task.id + ': ' + task.description"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <button 
+                                type="button" 
+                                @click="addDependency()" 
+                                :disabled="!newDependencyId || addingDependency"
+                                style="padding: 0.5rem 1rem; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;"
+                            >
+                                <span x-show="!addingDependency">Add</span>
+                                <span x-show="addingDependency">Adding...</span>
+                            </button>
+                        </div>
+                        
+                        <div x-show="getAvailableDependencyTasks().length === 0 && (!editForm.dependencies || editForm.dependencies.length === 0)" style="font-size: 0.85rem; color: #666; margin-top: 0.5rem; font-style: italic;">
+                            No other tasks available to add as dependencies.
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button type="submit" :disabled="updatingTask || editForm.progress < 0 || editForm.progress > 100" style="flex: 1; padding: 0.75rem; background-color: #2c3e50; color: white; border: none; border-radius: 4px; cursor: pointer;" :class="updatingTask ? 'button-loading' : ''">
+                            <span x-show="!updatingTask">Update Task</span>
+                            <span x-show="updatingTask">
+                                <span class="spinner spinner-small"></span>Updating...
+                            </span>
+                        </button>
+                        <button type="button" @click="cancelEdit" :disabled="updatingTask" style="padding: 0.75rem 1.5rem; background-color: #95a5a6; color: white; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Create Task Form -->
+            <div x-show="showCreateForm" style="margin-bottom: 2rem; padding: 1.5rem; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9;">
+                <h3 style="margin-top: 0;">Create New Task</h3>
+                <form @submit.prevent="createTask">
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Description *</label>
+                        <textarea x-model="newTask.description" required style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; min-height: 80px;" placeholder="Enter task description"></textarea>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Due Date</label>
+                            <input type="date" x-model="newTask.due_date" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                            <div x-show="isPastDueDate(newTask.due_date)" style="color: orange; font-size: 0.9rem; margin-top: 0.25rem;">⚠️ Warning: Due date is in the past</div>
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Status *</label>
+                            <select x-model="newTask.status" required style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="not_started">Not Started</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                                <option value="blocked">Blocked</option>
+                                <option value="deferred">Deferred</option>
+                            </select>
+                            <div style="margin-top: 0.5rem;">
+                                <span class="status-badge" :class="'status-' + newTask.status.replace('_', '_')" x-text="newTask.status.replace('_', ' ')"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Progress (0-100%) *</label>
+                        <input type="range" x-model.number="newTask.progress" min="0" max="100" step="1" style="width: 100%; margin-bottom: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.9rem; color: #666;">0%</span>
+                            <span style="font-weight: bold; font-size: 1.1rem;" x-text="newTask.progress + '%'"></span>
+                            <span style="font-size: 0.9rem; color: #666;">100%</span>
+                        </div>
+                        <div class="progress-bar-container" style="margin-top: 0.5rem;">
+                            <div 
+                                class="progress-bar-fill" 
+                                :class="{
+                                    'progress-completed': newTask.progress === 100,
+                                    'progress-low': newTask.progress < 30,
+                                    'progress-medium': newTask.progress >= 30 && newTask.progress < 70
+                                }"
+                                :style="'width: ' + newTask.progress + '%'"
+                            >
+                                <span x-show="newTask.progress >= 20" x-text="newTask.progress + '%'"></span>
+                            </div>
+                        </div>
+                        <div x-show="newTask.progress < 0 || newTask.progress > 100" style="color: red; font-size: 0.9rem; margin-top: 0.25rem;">Progress must be between 0 and 100</div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button type="submit" :disabled="creatingTask || newTask.progress < 0 || newTask.progress > 100" style="flex: 1; padding: 0.75rem; background-color: #2c3e50; color: white; border: none; border-radius: 4px; cursor: pointer;" :class="creatingTask ? 'button-loading' : ''">
+                            <span x-show="!creatingTask">Create Task</span>
+                            <span x-show="creatingTask">
+                                <span class="spinner spinner-small"></span>Creating...
+                            </span>
+                        </button>
+                        <button type="button" @click="cancelCreate" :disabled="creatingTask" style="padding: 0.75rem 1.5rem; background-color: #95a5a6; color: white; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Error message -->
+            <div x-show="error" style="color: red; margin-bottom: 1rem; padding: 0.75rem; background-color: #ffe6e6; border-radius: 4px;" x-text="error"></div>
+            
+            <!-- Success message -->
+            <div x-show="success" style="color: green; margin-bottom: 1rem; padding: 0.75rem; background-color: #e6ffe6; border-radius: 4px;" x-text="success"></div>
+            
+            <!-- Loading state -->
+            <div x-show="loading" style="text-align: center; padding: 2rem;">Loading tasks...</div>
+            
+            <!-- Empty state -->
+            <div x-show="!loading && tasks.length === 0" style="text-align: center; padding: 3rem; color: #666;">
+                <p style="font-size: 1.2rem; margin-bottom: 0.5rem;">No tasks found</p>
+                <p x-show="filterStatus !== 'all'">Try changing the filter or create a new task.</p>
+                <p x-show="filterStatus === 'all'">Create your first task to get started!</p>
+            </div>
+            
+            <!-- Task list -->
+            <div x-show="!loading && tasks.length > 0">
+                <div style="display: grid; gap: 1rem;">
+                    <template x-for="task in tasks" :key="task.id">
+                        <div style="border: 1px solid #ddd; border-radius: 4px; padding: 1rem; background-color: white;">
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <div style="flex: 1;">
+                                    <h3 style="margin: 0 0 0.5rem 0;">
+                                        <span style="color: #3498db; font-weight: bold;">Task #<span x-text="task.id"></span>:</span> 
+                                        <span style="color: #2c3e50;" x-text="task.description"></span>
+                                    </h3>
+                                    <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; color: #666; font-size: 0.9rem; margin-bottom: 0.5rem;">
+                                        <span><strong>Status:</strong> <span class="status-badge" :class="'status-' + task.status.replace('_', '_')" x-text="task.status.replace('_', ' ')"></span></span>
+                                        <span><strong>Progress:</strong> <span x-text="task.progress + '%'"></span></span>
+                                        <span x-show="task.due_date"><strong>Due:</strong> <span x-text="task.due_date"></span></span>
+                                    </div>
+                                    <div class="progress-bar-container">
+                                        <div 
+                                            class="progress-bar-fill" 
+                                            :class="{
+                                                'progress-completed': task.progress === 100,
+                                                'progress-low': task.progress < 30,
+                                                'progress-medium': task.progress >= 30 && task.progress < 70
+                                            }"
+                                            :style="'width: ' + task.progress + '%'"
+                                        >
+                                            <span x-show="task.progress >= 20" x-text="task.progress + '%'"></span>
+                                        </div>
+                                    </div>
+                                    <div x-show="task.dependencies && task.dependencies.length > 0" style="margin-top: 0.5rem; font-size: 0.85rem; color: #555;">
+                                        <strong>Depends on:</strong> 
+                                        <template x-for="depId in task.dependencies" :key="depId">
+                                            <span style="display: inline-block; margin-left: 0.25rem; padding: 0.125rem 0.5rem; background-color: #e8f4f8; border-radius: 3px;" x-text="'Task #' + depId"></span>
+                                        </template>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <button @click="editTask(task)" :disabled="loading" style="padding: 0.25rem 0.75rem; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem;" :class="loading ? 'button-loading' : ''">Edit</button>
+                                    <button type="button" @click="deleteTask(task.id)" :disabled="loading || deletingTask === task.id" style="padding: 0.25rem 0.75rem; background-color: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; min-width: 70px;">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        function taskListApp() {
+            return {
+                tasks: [],
+                loading: false,
+                error: '',
+                success: '',
+                filterStatus: 'all',
+                isAdmin: false,
+                showCreateForm: false,
+                showEditForm: false,
+                creatingTask: false,
+                updatingTask: false,
+                editingTask: null,
+                deletingTask: null,
+                newDependencyId: '',
+                addingDependency: false,
+                newTask: {
+                    description: '',
+                    due_date: '',
+                    status: 'not_started',
+                    progress: 0
+                },
+                editForm: {
+                    description: '',
+                    due_date: '',
+                    status: 'not_started',
+                    progress: 0,
+                    dependencies: []
+                },
+                
+                async loadTasks() {
+                    this.loading = true;
+                    this.error = '';
+                    
+                    try {
+                        const url = `/api/tasks${this.filterStatus !== 'all' ? '?status=' + this.filterStatus : ''}`;
+                        const response = await fetch(url, {
+                            credentials: 'include'
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.tasks = data.tasks || [];
+                        } else {
+                            if (response.status === 401) {
+                                window.location.href = '/login.html';
+                            } else {
+                                const errorData = await response.json();
+                                this.error = errorData.error || 'Failed to load tasks';
+                            }
+                        }
+                    } catch (err) {
+                        this.error = 'Network error. Please try again.';
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                editTask(task) {
+                    this.editingTask = task;
+                    this.editForm = {
+                        description: task.description,
+                        due_date: task.due_date || '',
+                        status: task.status,
+                        progress: task.progress,
+                        dependencies: task.dependencies || []
+                    };
+                    this.newDependencyId = '';
+                    this.showCreateForm = false;
+                    this.showEditForm = true;
+                },
+                
+                cancelEdit() {
+                    this.showEditForm = false;
+                    this.editingTask = null;
+                    this.editForm = {
+                        description: '',
+                        due_date: '',
+                        status: 'not_started',
+                        progress: 0,
+                        dependencies: []
+                    };
+                    this.newDependencyId = '';
+                },
+                
+                getTaskDescription(taskId) {
+                    const task = this.tasks.find(t => t.id === taskId);
+                    return task ? task.description : 'Unknown';
+                },
+                
+                getAvailableDependencyTasks() {
+                    if (!this.editingTask) return [];
+                    // Return all tasks except the current one and ones already in dependencies
+                    return this.tasks.filter(t => 
+                        t.id !== this.editingTask.id && 
+                        !this.editForm.dependencies.includes(t.id)
+                    );
+                },
+                
+                async addDependency() {
+                    if (!this.newDependencyId || !this.editingTask) return;
+                    
+                    this.error = '';
+                    this.success = '';
+                    this.addingDependency = true;
+                    
+                    try {
+                        const response = await fetch(`/api/tasks/${this.editingTask.id}/dependencies`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ depends_on_task_id: parseInt(this.newDependencyId) })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.success = 'Dependency added successfully!';
+                            this.editForm.dependencies.push(parseInt(this.newDependencyId));
+                            this.newDependencyId = '';
+                            this.loadTasks(); // Reload to get updated task data
+                        } else {
+                            this.error = data.error || 'Failed to add dependency';
+                        }
+                    } catch (err) {
+                        this.error = 'Network error. Please try again.';
+                    } finally {
+                        this.addingDependency = false;
+                    }
+                },
+                
+                async removeDependency(depId) {
+                    if (!this.editingTask) return;
+                    
+                    this.error = '';
+                    this.success = '';
+                    
+                    try {
+                        const response = await fetch(`/api/tasks/${this.editingTask.id}/dependencies/${depId}`, {
+                            method: 'DELETE',
+                            credentials: 'include'
+                        });
+                        
+                        if (response.ok || response.status === 204) {
+                            this.success = 'Dependency removed successfully!';
+                            this.editForm.dependencies = this.editForm.dependencies.filter(id => id !== depId);
+                            this.loadTasks(); // Reload to get updated task data
+                        } else {
+                            const errorData = await response.json().catch(() => ({ error: 'Failed to remove dependency' }));
+                            this.error = errorData.error || 'Failed to remove dependency';
+                        }
+                    } catch (err) {
+                        this.error = 'Network error. Please try again.';
+                    }
+                },
+                
+                async updateTask() {
+                    this.error = '';
+                    this.success = '';
+                    this.updatingTask = true;
+                    
+                    // Validate progress
+                    if (this.editForm.progress < 0 || this.editForm.progress > 100) {
+                        this.error = 'Progress must be between 0 and 100';
+                        this.updatingTask = false;
+                        return;
+                    }
+                    
+                    // Check if marking as completed and validate dependencies
+                    if (this.editForm.status === 'completed' && this.editForm.status !== this.editingTask.status) {
+                        if (this.editForm.dependencies && this.editForm.dependencies.length > 0) {
+                            // Check if all dependencies are completed
+                            const incompleteDeps = [];
+                            for (const depId of this.editForm.dependencies) {
+                                const depTask = this.tasks.find(t => t.id === depId);
+                                if (depTask && depTask.status !== 'completed') {
+                                    incompleteDeps.push(`Task #${depId}: ${depTask.description}`);
+                                }
+                            }
+                            
+                            if (incompleteDeps.length > 0) {
+                                this.error = 'Cannot mark task as completed: the following dependencies are not completed: ' + incompleteDeps.join(', ');
+                                this.updatingTask = false;
+                                return;
+                            }
+                        }
+                    }
+                    
+                    try {
+                        const requestBody = {};
+                        if (this.editForm.description !== this.editingTask.description) {
+                            requestBody.description = this.editForm.description;
+                        }
+                        if (this.editForm.due_date !== (this.editingTask.due_date || '')) {
+                            requestBody.due_date = this.editForm.due_date || null;
+                        }
+                        if (this.editForm.status !== this.editingTask.status) {
+                            requestBody.status = this.editForm.status;
+                        }
+                        if (this.editForm.progress !== this.editingTask.progress) {
+                            requestBody.progress = this.editForm.progress;
+                        }
+                        
+                        const response = await fetch(`/api/tasks/${this.editingTask.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(requestBody)
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.success = 'Task updated successfully!';
+                            this.showEditForm = false;
+                            this.editingTask = null;
+                            this.loadTasks(); // Reload tasks
+                        } else {
+                            this.error = data.error || 'Failed to update task';
+                        }
+                    } catch (err) {
+                        this.error = 'Network error. Please try again.';
+                    } finally {
+                        this.updatingTask = false;
+                    }
+                },
+                
+                async deleteTask(taskId) {
+                    console.log('deleteTask called with taskId:', taskId);
+                    
+                    if (!confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
+                        return;
+                    }
+                    
+                    this.error = '';
+                    this.success = '';
+                    this.deletingTask = taskId;
+                    
+                    try {
+                        const response = await fetch(`/api/tasks/${taskId}`, {
+                            method: 'DELETE',
+                            credentials: 'include'
+                        });
+                        
+                        if (response.ok || response.status === 204) {
+                            this.success = 'Task deleted successfully!';
+                            await this.loadTasks(); // Reload tasks
+                        } else {
+                            const errorData = await response.json().catch(() => ({ error: 'Failed to delete task' }));
+                            this.error = errorData.error || 'Failed to delete task';
+                        }
+                    } catch (err) {
+                        console.error('Error deleting task:', err);
+                        this.error = 'Network error. Please try again.';
+                    } finally {
+                        this.deletingTask = null;
+                    }
+                },
+                
+                async createTask() {
+                    this.error = '';
+                    this.success = '';
+                    this.creatingTask = true;
+                    
+                    // Validate progress
+                    if (this.newTask.progress < 0 || this.newTask.progress > 100) {
+                        this.error = 'Progress must be between 0 and 100';
+                        this.creatingTask = false;
+                        return;
+                    }
+                    
+                    try {
+                        const requestBody = {
+                            description: this.newTask.description,
+                            status: this.newTask.status,
+                            progress: this.newTask.progress
+                        };
+                        
+                        if (this.newTask.due_date) {
+                            requestBody.due_date = this.newTask.due_date;
+                        }
+                        
+                        const response = await fetch('/api/tasks', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(requestBody)
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.success = 'Task created successfully!';
+                            this.showCreateForm = false;
+                            this.newTask = {
+                                description: '',
+                                due_date: '',
+                                status: 'not_started',
+                                progress: 0
+                            };
+                            this.loadTasks(); // Reload tasks
+                        } else {
+                            this.error = data.error || 'Failed to create task';
+                        }
+                    } catch (err) {
+                        this.error = 'Network error. Please try again.';
+                    } finally {
+                        this.creatingTask = false;
+                    }
+                },
+                
+                cancelCreate() {
+                    this.showCreateForm = false;
+                    this.newTask = {
+                        description: '',
+                        due_date: '',
+                        status: 'not_started',
+                        progress: 0
+                    };
+                    this.error = '';
+                    this.success = '';
+                },
+                
+                isPastDueDate(dateStr) {
+                    if (!dateStr) return false;
+                    const dueDate = new Date(dateStr);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    return dueDate < today;
+                },
+                
+                async handleLogout() {
+                    try {
+                        await fetch('/api/logout', {
+                            method: 'POST',
+                            credentials: 'include'
+                        });
+                        window.location.href = '/login.html';
+                    } catch (err) {
+                        console.error('Logout failed:', err);
+                    }
+                },
+                
+                async checkUserType() {
+                    try {
+                        const response = await fetch('/api/me', {
+                            credentials: 'include'
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.isAdmin = data.user_type === 'admin';
+                        }
+                    } catch (err) {
+                        console.error('Failed to check user type:', err);
+                    }
+                }
+            }
+        }
+        
+        // Check user type on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const app = Alpine.$data(document.querySelector('#app'));
+            app.checkUserType();
+        });
+    </script>
+</body>
+</html>

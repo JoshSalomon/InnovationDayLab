@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Task Management App</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+    <div id="app" x-data="loginApp()">
+        <header>
+            <h1>Task Management</h1>
+        </header>
+        <main style="max-width: 400px; margin: 4rem auto;">
+            <h2>Login</h2>
+            <form @submit.prevent="handleLogin" style="margin-top: 2rem;">
+                <div style="margin-bottom: 1rem;">
+                    <label for="username" style="display: block; margin-bottom: 0.5rem;">Username:</label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        x-model="username" 
+                        required
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                    >
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <label for="password" style="display: block; margin-bottom: 0.5rem;">Password:</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        x-model="password" 
+                        required
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+                    >
+                </div>
+                <div x-show="error" style="color: red; margin-bottom: 1rem;" x-text="error"></div>
+                <button 
+                    type="submit" 
+                    :disabled="loading"
+                    style="width: 100%; padding: 0.75rem; background-color: #2c3e50; color: white; border: none; border-radius: 4px; cursor: pointer;"
+                    :class="loading ? 'button-loading' : ''"
+                >
+                    <span x-show="!loading">Login</span>
+                    <span x-show="loading">
+                        <span class="spinner spinner-small"></span>Logging in...
+                    </span>
+                </button>
+            </form>
+        </main>
+    </div>
+    <script>
+        function loginApp() {
+            return {
+                username: '',
+                password: '',
+                error: '',
+                loading: false,
+                async handleLogin() {
+                    this.error = '';
+                    this.loading = true;
+                    
+                    try {
+                        const response = await fetch('/api/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({
+                                username: this.username,
+                                password: this.password
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            window.location.href = '/';
+                        } else {
+                            const data = await response.json();
+                            this.error = data.error || 'Login failed';
+                        }
+                    } catch (err) {
+                        this.error = 'Network error. Please try again.';
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
